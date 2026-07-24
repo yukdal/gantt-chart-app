@@ -1,0 +1,1744 @@
+/* 간트 차트 — 3단계 스타일 (데스크탑 1280px+ 전용) */
+
+/* ════════════════════════════════════════════════════════════
+   12단계: 다크모드 — CSS 변수 토큰화
+   - :root 에 라이트 기본값을 두고, 시스템 다크는 prefers-color-scheme 로,
+     사용자가 명시적으로 고른 값은 [data-theme] 로 오버라이드한다(우선순위 높음).
+   - 상태 5색(plan/setup/ongoing/complete/delayed)은 의미색이라 index.html
+     범례·gantt.js 인라인 스타일에 값 그대로 유지하며 이 파일에서 건드리지 않는다.
+     (delayed 의 #ef4444 만 --danger 로 토큰화해 재사용 — 값은 동일)
+   ════════════════════════════════════════════════════════════ */
+
+/* ── 공통 변수 (라이트 기본값) ── */
+:root {
+  --row-h: 36px;              /* 태스크/타임라인 행 높이 (좌우 정확히 일치) */
+  --head-h: 56px;            /* 축 헤더 높이 (2줄) */
+  --left-w: 320px;           /* 좌측 태스크 패널 고정 폭 */
+  --col-w: 40px;             /* 타임라인 1칸(일 보기 하루) 기본 폭 */
+  --bar-color: #2f6fed;      /* 태스크 바 기본색 (파랑 계열) */
+  --bar-color-dark: #1f4fb0; /* 태스크 바 테두리/강조 */
+  --border: #d7dde5;         /* 격자/구분선 */
+  --weekend-bg: #f0f2f5;     /* 주말 열 배경 */
+  --today-line: #e02424;     /* 오늘 기준선 색 */
+  --text: #1f2933;
+  --text-muted: #6b7684;
+
+  /* 표면(배경) 톤 */
+  --bg-page: #f4f6f8;         /* 페이지(body) 배경 */
+  --bg-surface: #ffffff;      /* 카드형 표면: 툴바·패널·모달·버튼·인풋 */
+  --bg-surface-alt: #f7f9fb;  /* 헤더 행(좌측/타임라인 축 헤더) */
+  --bg-hover: #eef2f7;        /* 일반 hover 배경 (버튼·그룹행 등) */
+  --bg-hover-accent: #f2f7ff; /* 파랑 톤 hover 배경 (목록 행·메뉴 항목) */
+  --bg-disabled: #f1f3f5;     /* 비활성 인풋/낮은 우선순위 배지 배경 */
+  --border-light: #eef1f4;    /* 얇은 행 구분선 */
+  --text-on-accent: #ffffff;  /* 채워진 색 배경 위 텍스트(항상 흰색 고정) */
+  --weekend-text: #b0455f;    /* 주말 헤더 텍스트 */
+  --focus-ring: #2f6fed;      /* 키보드 포커스 링 색 */
+
+  /* 그림자/오버레이 */
+  --shadow-toolbar: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-panel: -4px 0 16px rgba(0, 0, 0, 0.08);
+  --shadow-dropdown: 0 6px 18px rgba(0, 0, 0, 0.12);
+  --shadow-modal: 0 10px 30px rgba(0, 0, 0, 0.2);
+  --shadow-toast: 0 4px 14px rgba(0, 0, 0, 0.18);
+  --shadow-tooltip: 0 2px 6px rgba(0, 0, 0, 0.25);
+  --text-shadow-label: 0 1px 1px rgba(0, 0, 0, 0.25);
+  --overlay-backdrop: rgba(0, 0, 0, 0.25);  /* 우측 패널 뒤 배경 */
+  --overlay-modal: rgba(0, 0, 0, 0.35);     /* 모달 뒤 배경 */
+  --hover-overlay: rgba(0, 0, 0, 0.08);     /* 아이콘 버튼 hover */
+  --swatch-border: rgba(0, 0, 0, 0.15);     /* 색 스와치/점 테두리 */
+  --accent-ring: rgba(47, 111, 237, 0.15);  /* 인풋 포커스 글로우 */
+
+  /* 위험/경고/성공 (의미색 — 값 자체는 밝기만 다크에서 미세 조정) */
+  --danger: #ef4444;
+  --danger-dark: #b81c1c;     /* 오류 텍스트/버튼 테두리 */
+  --danger-bg: #fdecec;       /* 오류 박스 배경 */
+  --danger-border: #f4a6a6;   /* 오류 박스 테두리 */
+  --danger-strong: #dc2626;   /* 에러 토스트 배경 */
+  --danger-strong-border: #b91c1c;
+  --success: #16a34a;
+  --success-border: #15803d;
+  --warn-bg: #fff8e1;
+  --warn-border: #f2d98b;
+  --warn-text: #7a5b00;
+
+  /* 배지/보조 색 */
+  --badge-personal-bg: #e3f2fd;
+  --badge-personal-text: #1565c0;
+  --badge-work-bg: #fce4ec;
+  --badge-work-text: #ad1457;
+  --prio-high: #c2410c;
+  --prio-high-bg: #ffedd5;
+  --prio-low-bar: #d1d5db;
+  --prio-low-text: #6b7280;
+  --dup-badge-bg: #e5e7eb;
+  --dup-badge-text: #4b5563;
+  --import-header-bg: #dce6f1;
+  --import-cell-border: #e5e9ef;
+  --milestone-border: #16357a;
+  --ghost-color: #94a3b8;
+  --ghost-bg: rgba(148, 163, 184, 0.12);
+  --tooltip-bg: #1f2933;
+  --handle-highlight: rgba(255, 255, 255, 0.75);
+  --handle-active-bg: rgba(255, 255, 255, 0.3);
+}
+
+/* ── 시스템이 다크 모드일 때 자동 반영 (사용자가 라이트를 명시하지 않은 경우) ── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --border: #3a4048;
+    --weekend-bg: #23282e;
+    --text: #e8eaed;
+    --text-muted: #9aa4b2;
+
+    --bg-page: #1a1d21;
+    --bg-surface: #22262b;
+    --bg-surface-alt: #262b31;
+    --bg-hover: #2d333a;
+    --bg-hover-accent: #26313f;
+    --bg-disabled: #2a2f35;
+    --border-light: #33383f;
+    --weekend-text: #d17a94;
+    --focus-ring: #5b9dff;
+
+    --swatch-border: rgba(255, 255, 255, 0.18);
+    --hover-overlay: rgba(255, 255, 255, 0.12);
+    --overlay-backdrop: rgba(0, 0, 0, 0.5);
+    --overlay-modal: rgba(0, 0, 0, 0.6);
+
+    --danger: #f87171;
+    --danger-dark: #ff8a8a;
+    --danger-bg: #3a1f1f;
+    --danger-border: #6b3030;
+
+    --warn-bg: #3a331a;
+    --warn-border: #6b5a26;
+    --warn-text: #e0c46c;
+
+    --badge-personal-bg: #1c3a52;
+    --badge-personal-text: #7ab8f5;
+    --badge-work-bg: #4a2536;
+    --badge-work-text: #f299c2;
+    --prio-high: #f0824a;
+    --prio-high-bg: #4a2f14;
+    --prio-low-text: #9aa4b2;
+    --dup-badge-bg: #363c44;
+    --dup-badge-text: #b7c0cc;
+    --import-header-bg: #24344a;
+    --import-cell-border: #333941;
+  }
+}
+
+/* ── 사용자가 헤더의 다크모드 버튼으로 명시 선택한 값 (시스템 설정보다 우선) ── */
+:root[data-theme="dark"] {
+  --border: #3a4048;
+  --weekend-bg: #23282e;
+  --text: #e8eaed;
+  --text-muted: #9aa4b2;
+
+  --bg-page: #1a1d21;
+  --bg-surface: #22262b;
+  --bg-surface-alt: #262b31;
+  --bg-hover: #2d333a;
+  --bg-hover-accent: #26313f;
+  --bg-disabled: #2a2f35;
+  --border-light: #33383f;
+  --weekend-text: #d17a94;
+  --focus-ring: #5b9dff;
+
+  --swatch-border: rgba(255, 255, 255, 0.18);
+  --hover-overlay: rgba(255, 255, 255, 0.12);
+  --overlay-backdrop: rgba(0, 0, 0, 0.5);
+  --overlay-modal: rgba(0, 0, 0, 0.6);
+
+  --danger: #f87171;
+  --danger-dark: #ff8a8a;
+  --danger-bg: #3a1f1f;
+  --danger-border: #6b3030;
+
+  --warn-bg: #3a331a;
+  --warn-border: #6b5a26;
+  --warn-text: #e0c46c;
+
+  --badge-personal-bg: #1c3a52;
+  --badge-personal-text: #7ab8f5;
+  --badge-work-bg: #4a2536;
+  --badge-work-text: #f299c2;
+  --prio-high: #f0824a;
+  --prio-high-bg: #4a2f14;
+  --prio-low-text: #9aa4b2;
+  --dup-badge-bg: #363c44;
+  --dup-badge-text: #b7c0cc;
+  --import-header-bg: #24344a;
+  --import-cell-border: #333941;
+}
+
+/* 사용자가 명시적으로 라이트를 선택한 경우 — :root 기본값과 동일하지만,
+   시스템이 다크인데 사용자가 라이트를 고른 경우를 이기려면 명시적으로 존재해야 한다. */
+:root[data-theme="light"] {
+  --border: #d7dde5;
+  --weekend-bg: #f0f2f5;
+  --text: #1f2933;
+  --text-muted: #6b7684;
+
+  --bg-page: #f4f6f8;
+  --bg-surface: #ffffff;
+  --bg-surface-alt: #f7f9fb;
+  --bg-hover: #eef2f7;
+  --bg-hover-accent: #f2f7ff;
+  --bg-disabled: #f1f3f5;
+  --border-light: #eef1f4;
+  --weekend-text: #b0455f;
+  --focus-ring: #2f6fed;
+
+  --swatch-border: rgba(0, 0, 0, 0.15);
+  --hover-overlay: rgba(0, 0, 0, 0.08);
+  --overlay-backdrop: rgba(0, 0, 0, 0.25);
+  --overlay-modal: rgba(0, 0, 0, 0.35);
+
+  --danger: #ef4444;
+  --danger-dark: #b81c1c;
+  --danger-bg: #fdecec;
+  --danger-border: #f4a6a6;
+
+  --warn-bg: #fff8e1;
+  --warn-border: #f2d98b;
+  --warn-text: #7a5b00;
+
+  --badge-personal-bg: #e3f2fd;
+  --badge-personal-text: #1565c0;
+  --badge-work-bg: #fce4ec;
+  --badge-work-text: #ad1457;
+  --prio-high: #c2410c;
+  --prio-high-bg: #ffedd5;
+  --prio-low-text: #6b7280;
+  --dup-badge-bg: #e5e7eb;
+  --dup-badge-text: #4b5563;
+  --import-header-bg: #dce6f1;
+  --import-cell-border: #e5e9ef;
+}
+
+/* ── PNG/PPTX 오프스크린 캡처 전용: 문서 루트의 테마와 무관하게 항상 라이트로 고정 ──
+   (12단계 다크모드 회귀 수정) 이 클래스가 붙은 서브트리 안에서는 색 변수가 전부
+   :root[data-theme="light"] 과 동일한 값으로 재정의된다. CSS 커스텀 프로퍼티는
+   상속되므로, 조상(문서 루트)이 다크여도 이 지점에서 재정의하면 그 값이 이긴다. */
+.export-force-light {
+  /* 변수 재정의만으로는 부족하다: 자기만의 color 규칙이 없는 요소(태스크명·그룹명 등)는
+     조상(body)에서 "이미 계산된" 다크 글자색을 그대로 상속받아 흰 배경 위에서 보이지
+     않게 된다. 그래서 이 지점에서 color 를 라이트 값으로 다시 확정한다. */
+  color: var(--text);
+
+  --border: #d7dde5;
+  --weekend-bg: #f0f2f5;
+  --text: #1f2933;
+  --text-muted: #6b7684;
+
+  --bg-page: #f4f6f8;
+  --bg-surface: #ffffff;
+  --bg-surface-alt: #f7f9fb;
+  --bg-hover: #eef2f7;
+  --bg-hover-accent: #f2f7ff;
+  --bg-disabled: #f1f3f5;
+  --border-light: #eef1f4;
+  --weekend-text: #b0455f;
+  --focus-ring: #2f6fed;
+
+  --swatch-border: rgba(0, 0, 0, 0.15);
+  --hover-overlay: rgba(0, 0, 0, 0.08);
+  --overlay-backdrop: rgba(0, 0, 0, 0.25);
+  --overlay-modal: rgba(0, 0, 0, 0.35);
+
+  --danger: #ef4444;
+  --danger-dark: #b81c1c;
+  --danger-bg: #fdecec;
+  --danger-border: #f4a6a6;
+
+  --warn-bg: #fff8e1;
+  --warn-border: #f2d98b;
+  --warn-text: #7a5b00;
+
+  --badge-personal-bg: #e3f2fd;
+  --badge-personal-text: #1565c0;
+  --badge-work-bg: #fce4ec;
+  --badge-work-text: #ad1457;
+  --prio-high: #c2410c;
+  --prio-high-bg: #ffedd5;
+  --prio-low-text: #6b7280;
+  --dup-badge-bg: #e5e7eb;
+  --dup-badge-text: #4b5563;
+  --import-header-bg: #dce6f1;
+  --import-cell-border: #e5e9ef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+  background: var(--bg-page);
+  color: var(--text);
+  /* 데스크탑 전용: 가로 스크롤은 타임라인 내부에서만 */
+  overflow: hidden;
+}
+
+/* ── 키보드 포커스 시각화 (12단계) ──
+   마우스 클릭 시에는 링을 숨기고, 키보드(Tab 등) 포커스에서만 보인다. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── 앱 셸 (세로 레이아웃) ── */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 1280px; /* 데스크탑 전용 */
+}
+
+/* ── 상단 툴바 ── */
+.toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0 1rem;
+  height: 52px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-toolbar);
+}
+
+.toolbar__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.toolbar__scale {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.scale-btn {
+  padding: 0.4rem 0.9rem;
+  border: none;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-left: 1px solid var(--border);
+}
+
+.scale-btn:first-child {
+  border-left: none;
+}
+
+.scale-btn:hover {
+  background: var(--bg-hover);
+}
+
+/* 현재 선택된 보기 단위 강조 */
+.scale-btn.is-active {
+  background: var(--bar-color);
+  color: var(--text-on-accent);
+}
+
+/* ── 간트 영역 (좌우 수평 분할) ── */
+.gantt {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0; /* flex 자식 스크롤 허용 */
+  background: var(--bg-surface);
+}
+
+/* 좌측 태스크 패널 (고정 폭) */
+.gantt__left {
+  flex: 0 0 var(--left-w);
+  width: var(--left-w);
+  display: flex;
+  flex-direction: column;
+  border-right: 2px solid var(--border);
+  overflow: hidden; /* 세로 스크롤은 JS로 우측과 동기화 */
+}
+
+.gantt__left-head {
+  flex: 0 0 var(--head-h);
+  height: var(--head-h);
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  background: var(--bg-surface-alt);
+  border-bottom: 1px solid var(--border);
+}
+
+.gantt__left-body {
+  flex: 1 1 auto;
+  overflow: hidden; /* 자체 스크롤바 숨김: 우측 스크롤과 동기화 */
+}
+
+/* 우측 타임라인 (가로 스크롤 가능) */
+.gantt__right {
+  flex: 1 1 auto;
+  overflow-x: auto;   /* 가로 스크롤 */
+  overflow-y: auto;   /* 세로 스크롤 (주 스크롤러) */
+  position: relative;
+}
+
+/* ── 타임라인 축 헤더 (2줄, 상단 고정) ── */
+.timeline__head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: var(--head-h);
+  background: var(--bg-surface-alt);
+  border-bottom: 1px solid var(--border);
+}
+
+.timeline__head-inner {
+  position: relative;
+  height: 100%;
+}
+
+/* 상단 줄 (연/월 등 그룹 라벨) */
+.axis-top {
+  display: flex;
+  height: calc(var(--head-h) / 2);
+  border-bottom: 1px solid var(--border);
+}
+
+.axis-top__cell {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 하단 줄 (일/주시작/월 라벨) */
+.axis-bottom {
+  display: flex;
+  height: calc(var(--head-h) / 2);
+}
+
+.axis-bottom__cell {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 주말 열 헤더 강조 */
+.axis-bottom__cell.is-weekend {
+  background: var(--weekend-bg);
+  color: var(--weekend-text);
+}
+
+/* 오늘 열 헤더 라벨 */
+.axis-bottom__cell.is-today {
+  color: var(--today-line);
+  font-weight: 700;
+}
+
+.axis-today-label {
+  font-size: 0.62rem;
+  color: var(--today-line);
+  font-weight: 700;
+}
+
+/* ── 타임라인 본문 ── */
+.timeline__body {
+  position: relative;
+}
+
+/* 세로 격자선 열 (배경) */
+.grid-col {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 1px solid var(--border);
+}
+
+.grid-col.is-weekend {
+  background: var(--weekend-bg);
+}
+
+/* 태스크 행 (좌우 공통 높이) */
+.row {
+  height: var(--row-h);
+  border-bottom: 1px solid var(--border-light);
+  position: relative;
+}
+
+/* 프로젝트 그룹 헤더 행 (좌측/우측 모두) */
+.group-row {
+  height: var(--row-h);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-hover);
+}
+
+/* ── 좌측 태스크 목록 내용 ── */
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 100%;
+  padding: 0 0.75rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+/* 프로젝트 카테고리 배지 */
+.badge {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.badge--personal {
+  background: var(--badge-personal-bg);
+  color: var(--badge-personal-text);
+}
+
+.badge--work {
+  background: var(--badge-work-bg);
+  color: var(--badge-work-text);
+}
+
+/* 좌측 태스크 행 내용 */
+.task-label {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 0.75rem;
+  font-size: 0.82rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 마일스톤 태스크 라벨 앞 다이아몬드 */
+.task-label__diamond {
+  color: var(--bar-color-dark);
+  margin-right: 0.35rem;
+  flex: 0 0 auto;
+}
+
+.task-label__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 타임라인 태스크 바 ── */
+/* 배경/테두리 색은 상태별로 JS 가 inline style 로 지정한다. */
+.bar {
+  position: absolute;
+  height: calc(var(--row-h) - 14px);
+  top: 7px;
+  background: var(--bar-color);
+  border: 1px solid var(--bar-color-dark);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  color: var(--text-on-accent);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* 진행률 채움 (같은 색 계열 어두운 톤) — 바 왼쪽부터 progress% 만큼 */
+.bar__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 0;              /* 라벨/텍스트 아래 */
+  border-radius: 3px 0 0 3px;
+}
+
+/* 우선순위 세로 띠 (바 왼쪽 가장자리) */
+.bar__prio {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 2;             /* 채움 위에 표시 */
+  pointer-events: none;
+}
+
+.bar__prio--high {
+  width: 5px;             /* 두껍게 */
+  background: var(--prio-high);
+}
+
+.bar__prio--low {
+  width: 3px;             /* 얇게 */
+  background: var(--prio-low-bar);
+}
+
+/* 진행률 텍스트 "NN%" (바 오른쪽) */
+.bar__pct {
+  position: relative;
+  z-index: 1;
+  margin-left: auto;      /* 오른쪽 끝으로 */
+  padding-left: 4px;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  text-shadow: var(--text-shadow-label);
+}
+
+/* 자동 지연 경고: 바에 빨간 점선 테두리 */
+.bar--overdue {
+  border: 2px dashed var(--danger) !important;
+}
+
+/* 바 안에 이름 (바가 충분히 넓을 때) */
+.bar__label {
+  position: relative;
+  z-index: 1;             /* 진행률 채움 위에 표시 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: var(--text-shadow-label);
+}
+
+/* 좁은 바: 바깥 라벨이 overflow:hidden 에 잘리지 않도록 예외 처리 */
+.bar--narrow {
+  overflow: visible;
+}
+
+/* 바가 좁을 때 바 오른쪽 바깥에 이름 표시 */
+.bar__label--outside {
+  position: absolute;
+  left: 100%;
+  margin-left: 6px;
+  color: var(--text);
+  font-size: 0.72rem;
+  pointer-events: none;
+}
+
+/* 마일스톤 다이아몬드 마커 */
+.milestone {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  top: calc((var(--row-h) - 14px) / 2);
+  background: var(--bar-color-dark);
+  transform: rotate(45deg);
+  border: 1px solid var(--milestone-border);
+}
+
+.milestone__label {
+  position: absolute;
+  left: 16px;
+  top: 1px;
+  transform: rotate(-45deg);
+  transform-origin: left center;
+  color: var(--text);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── 오늘 기준선 (세로 빨간 점선) ── */
+.today-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px dashed var(--today-line);
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* ── 빈 상태 ── */
+/* 주의: 아래의 display:flex 가 UA 스타일시트의 [hidden]{display:none} 을
+   덮어쓰므로, hidden 속성이 있을 때는 반드시 숨기도록 명시해야 한다. */
+.empty-state[hidden] {
+  display: none;
+}
+
+.empty-state {
+  position: absolute;
+  inset: 52px 0 0 0; /* 툴바 아래 전체 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--bg-surface);
+}
+
+.empty-state__title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.empty-state__desc {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+/* ════════════════════════════════════════════════════════════
+   4단계: 프로젝트·태스크 CRUD UI
+   ════════════════════════════════════════════════════════════ */
+
+/* ── 툴바 생성 버튼 (오른쪽으로 밀기) ── */
+.toolbar__actions {
+  margin-left: auto;       /* 남는 공간을 밀어 우측 정렬 */
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+/* 공통 버튼 */
+.btn {
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+}
+
+/* 비활성 버튼 (예: 프로젝트 0개일 때 + 태스크) */
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+  background: var(--bg-surface);
+}
+
+/* 강조(주요) 버튼 */
+.btn--primary {
+  background: var(--bar-color);
+  border-color: var(--bar-color-dark);
+  color: var(--text-on-accent);
+}
+
+.btn--primary:hover {
+  background: var(--bar-color-dark);
+}
+
+/* 위험(삭제) 버튼 */
+.btn--danger {
+  background: var(--today-line);
+  border-color: var(--danger-dark);
+  color: var(--text-on-accent);
+}
+
+.btn--danger:hover {
+  background: var(--danger-dark);
+}
+
+/* ── 좌측 목록 hover 액션 아이콘 ── */
+/* group-head / task-label 를 flex 로 두고 액션을 오른쪽 끝에 배치 */
+.group-head__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 행 액션 컨테이너: 평소 숨김, hover 시 표시 */
+.row-actions {
+  margin-left: auto;
+  display: none;
+  gap: 0.15rem;
+  flex: 0 0 auto;
+  padding-left: 0.35rem;
+}
+
+/* 좌측 태스크 행/그룹행에 마우스 올리면 액션 표시 */
+.gantt__left-body .row:hover .row-actions,
+.gantt__left-body .group-row:hover .row-actions {
+  display: inline-flex;
+}
+
+/* 태스크 행은 클릭 시 수정 진입 → 커서로 안내 */
+.gantt__left-body .row {
+  cursor: pointer;
+}
+
+.gantt__left-body .row:hover {
+  background: var(--bg-hover-accent);
+}
+
+/* 아이콘 버튼 (✎ 🗑) */
+.icon-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.15rem 0.25rem;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.icon-btn:hover {
+  background: var(--hover-overlay);
+  color: var(--text);
+}
+
+/* ── 패널 뒤 배경 ── */
+.panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-backdrop);
+  z-index: 20;
+}
+
+.panel-backdrop[hidden] {
+  display: none;
+}
+
+/* ── 우측 슬라이드 패널 ── */
+.side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  height: 100vh;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-panel);
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  /* 슬라이드 인 애니메이션 */
+  transform: translateX(0);
+  transition: transform 0.18s ease-out;
+}
+
+/* hidden 속성이 있으면 완전히 숨김 (display:flex 가 [hidden] 을 덮으므로 명시) */
+.side-panel[hidden] {
+  display: none;
+}
+
+/* 슬라이드 인 준비 상태 (열기 직전 오른쪽 바깥으로 이동) */
+.side-panel.is-entering {
+  transform: translateX(100%);
+}
+
+.side-panel__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.side-panel__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.side-panel__close {
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0 0.25rem;
+}
+
+.side-panel__close:hover {
+  color: var(--text);
+}
+
+.side-panel__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 1.1rem;
+}
+
+/* ── 폼 ── */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.field__label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.field__label em {
+  color: var(--today-line);
+  font-style: normal;
+}
+
+.field__input,
+.field__select,
+.field__textarea {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg-surface);
+}
+
+.field__textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
+/* 마우스 클릭 포커스에도 테두리 강조는 유지하되, 링(outline)은 키보드 포커스
+   (:focus-visible) 에서만 보이도록 전역 규칙에 맡긴다(outline:none 을 여기서
+   강제하지 않음 — 12단계 키보드 포커스 시각화와 충돌 방지). */
+.field__input:focus,
+.field__select:focus,
+.field__textarea:focus {
+  border-color: var(--bar-color);
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+.field__input:disabled,
+.field__select:disabled {
+  background: var(--bg-disabled);
+  color: var(--text-muted);
+}
+
+/* 라디오 그룹 (가로 배치) */
+.radio-group {
+  display: inline-flex;
+  gap: 1rem;
+}
+
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+/* 가로 2열 배치 (날짜, 진행률/상태 등) */
+.field-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.field-row .field {
+  flex: 1 1 0;
+}
+
+/* 체크박스 필드 (인라인) */
+.field--check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* 복수 선택(선행 태스크) */
+.field__select[multiple] {
+  min-height: 96px;
+}
+
+.field__hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* 업무 카테고리 안내 박스 (노란 배경) */
+.notice--work {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 6px;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--warn-text);
+}
+
+.notice--work[hidden] {
+  display: none;
+}
+
+/* 폼 내 서버/검증 에러 (빨간 박스) */
+.form__error {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.82rem;
+  color: var(--danger-dark);
+}
+
+.form__error[hidden] {
+  display: none;
+}
+
+/* 폼 버튼 영역 */
+.form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+/* ── 삭제 확인 모달 ── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-modal);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal {
+  width: 380px;
+  max-width: calc(100vw - 2rem);
+  background: var(--bg-surface);
+  border-radius: 10px;
+  box-shadow: var(--shadow-modal);
+  padding: 1.3rem;
+}
+
+.modal__title {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.modal__msg {
+  margin: 0 0 1.2rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-line; /* \n 을 줄바꿈으로 */
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* ════════════════════════════════════════════════════════════
+   5단계: 시각 요소 (상태 색·진행률·우선순위·지연 경고·범례·표시 토글)
+   ════════════════════════════════════════════════════════════ */
+
+/* ── 마일스톤 지연 경고 (빨간 점선 테두리) ── */
+.milestone--overdue {
+  border: 2px dashed var(--danger) !important;
+}
+
+/* ── 좌측 목록: 상태 색 점 ── */
+.status-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  border: 1px solid var(--swatch-border);
+}
+
+/* ── 좌측 목록: 우선순위 배지 (높음=주황 / 낮음=회색) ── */
+.prio-badge {
+  flex: 0 0 auto;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.prio-badge--high {
+  background: var(--prio-high-bg);
+  color: var(--prio-high);
+}
+
+.prio-badge--low {
+  background: var(--bg-disabled);
+  color: var(--prio-low-text);
+}
+
+/* ── 좌측 목록: 지연 경고 아이콘 (⚠) ── */
+.overdue-mark {
+  flex: 0 0 auto;
+  margin-left: 0.35rem;
+  color: var(--danger);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: help;
+}
+
+/* ── 상태 범례 바 (툴바 아래) ── */
+.legend-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  padding: 0.35rem 1rem;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.legend-bar[hidden] {
+  display: none;
+}
+
+.legend-bar__title {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--swatch-border);
+}
+
+.legend-warn {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.legend-sep {
+  color: var(--border);
+}
+
+/* ── 툴바 "표시 ▾" 드롭다운 ── */
+.display-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.display-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 25;
+  min-width: 150px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-dropdown);
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.display-menu[hidden] {
+  display: none;
+}
+
+.display-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.display-menu__item:hover {
+  background: var(--bg-hover-accent);
+}
+
+/* ════════════════════════════════════════════════════════════
+   6단계(1/3): 태스크 바 드래그 이동
+   ════════════════════════════════════════════════════════════ */
+
+/* 바·마일스톤: 잡을 수 있음을 커서로 안내 */
+.bar,
+.milestone {
+  cursor: grab;
+  touch-action: none; /* Pointer Events 드래그 시 브라우저 제스처 개입 방지 */
+}
+
+/* 드래그 중인 바/마일스톤: 반투명 + 최상위 표시 */
+.bar.is-dragging,
+.milestone.is-dragging {
+  opacity: 0.6;
+  z-index: 6;          /* 잔상·오늘선 위에 표시 */
+  cursor: grabbing;
+}
+
+/* 드래그 중 문서 전체 커서·텍스트 선택 방지 */
+body.is-drag-active {
+  cursor: grabbing;
+  user-select: none;
+}
+
+body.is-drag-active .bar,
+body.is-drag-active .milestone {
+  cursor: grabbing;
+}
+
+/* 원래 위치 잔상(고스트): 점선 외곽선만 표시 */
+.drag-ghost {
+  position: absolute;
+  border: 2px dashed var(--ghost-color);   /* 회청색 점선 */
+  border-radius: 4px;
+  background: var(--ghost-bg);
+  pointer-events: none;         /* 드래그 이벤트 방해 금지 */
+  z-index: 3;
+  box-sizing: border-box;
+}
+
+/* 드래그 중 임시 날짜 툴팁 "M/D ~ M/D" (바 위쪽) */
+.drag-tooltip {
+  position: absolute;
+  z-index: 7;                   /* 드래그 중인 바보다 위 */
+  padding: 2px 8px;
+  background: var(--tooltip-bg);          /* 진회색 배경(테마 무관 고정) */
+  color: var(--text-on-accent);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--shadow-tooltip);
+}
+
+/* ── 우상단 토스트 (저장 실패 알림) ── */
+.toast-host {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 50;                  /* 패널·모달보다 위 */
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;         /* 아래 UI 클릭 방해 금지 */
+}
+
+.toast {
+  max-width: 360px;
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  box-shadow: var(--shadow-toast);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* 표시 상태 (JS 가 다음 프레임에 부여 → 페이드 인) */
+.toast.is-shown {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 에러 토스트 (빨강) */
+.toast--error {
+  background: var(--danger-strong);
+  border: 1px solid var(--danger-strong-border);
+  color: var(--text-on-accent);
+}
+
+/* ════════════════════════════════════════════════════════════
+   6단계(2/3): 바 리사이즈 (양끝 핸들)
+   ════════════════════════════════════════════════════════════ */
+
+/* 양끝 핸들: 평소엔 투명한 잡기 영역 (8px, 좁은 바에서는 1/3 이하로 제한) */
+.bar__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  max-width: 33%;
+  z-index: 3;            /* 진행률 채움(0)·우선순위 띠(2)·라벨(1) 위 */
+  cursor: ew-resize;
+  background: transparent;
+}
+
+.bar__handle--left {
+  left: 0;
+}
+
+.bar__handle--right {
+  right: 0;
+}
+
+/* 바에 마우스를 올리면 핸들 위치를 얇은 흰 줄로 안내 (텍스트 가림 최소화) */
+.bar:hover .bar__handle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--handle-highlight);
+}
+
+.bar__handle--left::after {
+  left: 2px;
+}
+
+.bar__handle--right::after {
+  right: 2px;
+}
+
+/* 리사이즈 중 잡고 있는 핸들 하이라이트 */
+.bar__handle.is-active {
+  background: var(--handle-active-bg);
+}
+
+/* 리사이즈 중 문서 전체 커서·텍스트 선택 방지 */
+body.is-resize-active {
+  cursor: ew-resize;
+  user-select: none;
+}
+
+body.is-resize-active .bar,
+body.is-resize-active .bar__handle {
+  cursor: ew-resize;
+}
+
+/* ════════════════════════════════════════════════════════════
+   6단계(3/3): 좌측 목록 세로 드래그 순서 변경
+   ════════════════════════════════════════════════════════════ */
+
+/* 삽입선의 absolute 기준점 + 행 offsetTop 기준점 */
+.gantt__left-body {
+  position: relative;
+}
+
+/* 드래그 중인 행(자손 포함): 반투명 */
+.gantt__left-body .row.is-reorder-source {
+  opacity: 0.45;
+}
+
+/* 유효한 드롭 위치에 표시하는 파란 가로 삽입선 */
+.reorder-line {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 0;
+  border-top: 2px solid var(--bar-color);
+  z-index: 5;
+  pointer-events: none; /* 드래그 이벤트 방해 금지 */
+}
+
+/* 삽입선 왼쪽 끝 동그라미 (위치 강조) */
+.reorder-line::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bar-color);
+}
+
+/* 순서 변경 드래그 중: 텍스트 선택 방지 + 커서 */
+body.is-reorder-active {
+  cursor: grabbing;
+  user-select: none;
+}
+
+body.is-reorder-active .gantt__left-body .row {
+  cursor: grabbing;
+}
+
+/* ════════════════════════════════════════════════════════════
+   7단계: 의존성(FS) 화살표 오버레이
+   ════════════════════════════════════════════════════════════ */
+
+/* 화살표 SVG 레이어: 타임라인 본문 위 절대배치, 바 뒤에 깔림.
+   pointer-events:none 이라 바 드래그/클릭을 방해하지 않는다. */
+.dep-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* 기본 의존선 (회색 1.5px) */
+.dep-line {
+  fill: none;
+  stroke: var(--ghost-color);
+  stroke-width: 1.5;
+}
+
+/* 지연 강조 의존선 (빨강) — 후행 지연 경고 또는 선행 delayed */
+.dep-line--warn {
+  stroke: var(--danger);
+}
+
+/* ════════════════════════════════════════════════════════════
+   8단계: 줌 인/아웃 + 오늘로 이동
+   ════════════════════════════════════════════════════════════ */
+
+/* 줌 컨트롤 그룹 (− 배율 +) — 보기 전환 그룹과 같은 톤 */
+.toolbar__zoom {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+/* −/+ 버튼 */
+.zoom-btn {
+  width: 30px;
+  padding: 0.4rem 0;
+  border: none;
+  background: var(--bg-surface);
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.zoom-btn:hover {
+  background: var(--bg-hover);
+}
+
+/* 한계(50%/200%)에서 비활성 */
+.zoom-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: var(--bg-surface);
+}
+
+/* 현재 배율 표시 (예: 100%) */
+.zoom-label {
+  min-width: 44px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 0.4rem 0.2rem;
+  user-select: none;
+}
+
+/* ════════════════════════════════════════════════════════════
+   9단계: 엑셀 내보내기/가져오기
+   ════════════════════════════════════════════════════════════ */
+
+/* 드롭다운 메뉴 안의 항목 버튼 (엑셀 내보내기/가져오기) */
+.menu-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.menu-btn:hover {
+  background: var(--bg-hover-accent);
+}
+
+/* 성공 토스트 (초록) — drag.js 의 .toast 기본 스타일 재사용 */
+.toast--success {
+  background: var(--success);
+  border: 1px solid var(--success-border);
+  color: var(--text-on-accent);
+}
+
+/* 가져오기 미리보기 모달 (기본 .modal 보다 넓게) */
+.modal--import {
+  width: 960px;
+  max-width: calc(100vw - 3rem);
+  max-height: calc(100vh - 4rem);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 요약 줄 (추가될 프로젝트/태스크 수) */
+.import-summary {
+  font-size: 0.9rem;
+  margin-bottom: 0.8rem;
+  color: var(--text);
+}
+
+.import-summary__err {
+  color: var(--danger-dark);
+  font-weight: 700;
+}
+
+/* 요약의 "중복 제외 N건" (회색 — 오류의 빨강과 구분) */
+.import-summary__dup {
+  color: var(--prio-low-text);
+  font-weight: 700;
+}
+
+/* 오류 목록 박스 (빨간 톤, 자체 스크롤) */
+.import-errors {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.8rem;
+  color: var(--danger-dark);
+  max-height: 130px;
+  overflow-y: auto;
+  margin-bottom: 0.8rem;
+}
+
+.import-errors[hidden] {
+  display: none;
+}
+
+.import-errors__title {
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+}
+
+.import-errors ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.import-errors li {
+  margin: 0.15rem 0;
+}
+
+/* 미리보기 테이블 래퍼 (가로/세로 스크롤) */
+.import-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 0.8rem;
+}
+
+.import-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.import-table th,
+.import-table td {
+  border: 1px solid var(--import-cell-border);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 헤더 행: 연한 파랑(엑셀 서식과 동일 톤) + 스크롤 시 고정 */
+.import-table th {
+  background: var(--import-header-bg);
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+}
+
+/* 오류가 있는 행: 빨간 배경 강조 */
+.import-table tr.is-error td {
+  background: var(--danger-bg);
+  color: var(--danger-dark);
+}
+
+/* 중복으로 제외되는 행: 회색 처리 (오류의 빨강과 구분) */
+.import-table tr.is-duplicate td {
+  background: var(--bg-disabled);
+  color: var(--prio-low-text);
+}
+
+/* "중복(제외)" 배지 (태스크명 셀) */
+.dup-badge {
+  display: inline-block;
+  padding: 0.02rem 0.35rem;
+  border-radius: 999px;
+  background: var(--dup-badge-bg);
+  color: var(--dup-badge-text);
+  font-size: 0.66rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* "…외 N행" 안내 행 */
+.import-table__more {
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* "오류 행을 제외하고 반영" 체크 라벨 */
+.import-exclude {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.6rem;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.import-exclude[hidden] {
+  display: none;
+}
+
+/* ── 내보내기 범위 선택 모달 (엑셀/PNG/PPTX 공용) — 기본 .modal 재사용 + 배치만 추가 ── */
+/* PPTX 는 섹션이 4개(범위·차트 표현·레이아웃·표)라 모달이 길어진다.
+   화면 높이를 넘으면 내부에서만 세로 스크롤되게 하고 확인/취소 버튼은 항상 아래 고정. */
+.modal--scope {
+  max-height: calc(100vh - 3rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal--scope > .modal__title,
+.modal--scope > .modal__actions {
+  flex: 0 0 auto;
+}
+
+/* 제목과 버튼 사이 본문 영역만 스크롤 */
+.scope-body {
+  overflow-y: auto;
+  min-height: 0;
+  /* 스크롤바가 생겨도 라디오 포커스 링이 잘리지 않도록 */
+  padding-right: 0.2rem;
+  margin-right: -0.2rem;
+}
+
+.scope-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0.8rem 0 1.1rem;
+}
+
+.scope-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* 프로젝트 셀렉트 — "선택한 프로젝트" 라디오 아래 들여쓰기 */
+.scope-select {
+  margin-left: 1.6rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--bg-surface);
+}
+
+.scope-select:disabled {
+  background: var(--weekend-bg);
+  color: var(--text-muted);
+}
+
+/* 레이아웃 선택 (PPTX 전용) — 스코프 옵션과 톤 맞춤, 상단 구분선으로 구획 */
+.scope-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0 0 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.scope-layout__title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* 라디오 옆 텍스트: 제목 + 보조 설명(줄바꿈) */
+.scope-layout .scope-option {
+  align-items: flex-start;
+}
+
+.scope-layout__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.scope-layout__desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}

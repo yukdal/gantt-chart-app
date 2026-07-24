@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>간트 차트</title>
+  <!-- 다크모드 FOUC 방지 (12단계): 저장된 값이 있을 때만 data-theme 를 body 렌더 전에
+       미리 지정한다. 값이 없으면 아무것도 하지 않아 CSS 의 시스템 설정 감지를 그대로 따른다. -->
+  <script>
+    (function () {
+      try {
+        var saved = window.localStorage.getItem('gantt.theme');
+        if (saved === 'light' || saved === 'dark') {
+          document.documentElement.setAttribute('data-theme', saved);
+        }
+      } catch (e) { /* localStorage 접근 불가 시 시스템 설정을 그대로 따름 */ }
+    })();
+  </script>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- 앱 셸: 상단 툴바 + 아래 간트 영역 -->
+  <div class="app">
+    <!-- 상단 툴바 -->
+    <header class="toolbar">
+      <h1 class="toolbar__title">간트 차트</h1>
+      <!-- 일/주/월 보기 전환 버튼 그룹 -->
+      <div class="toolbar__scale" role="group" aria-label="보기 단위 전환">
+        <button type="button" class="scale-btn" data-scale="day">일</button>
+        <button type="button" class="scale-btn" data-scale="week">주</button>
+        <button type="button" class="scale-btn" data-scale="month">월</button>
+      </div>
+
+      <!-- 줌 인/아웃 (50%~200%, 한계에서 비활성) + 배율 표시 -->
+      <div class="toolbar__zoom" role="group" aria-label="줌 배율">
+        <button type="button" class="zoom-btn" id="btn-zoom-out" aria-label="축소" title="축소 (Ctrl+휠 아래)">−</button>
+        <span class="zoom-label" id="zoom-label">100%</span>
+        <button type="button" class="zoom-btn" id="btn-zoom-in" aria-label="확대" title="확대 (Ctrl+휠 위)">+</button>
+      </div>
+
+      <!-- 오늘 기준선을 화면 중앙으로 스크롤 -->
+      <button type="button" class="btn" id="btn-today" title="오늘 기준선을 화면 중앙으로">오늘</button>
+
+      <!-- 생성 버튼 그룹 (오른쪽 정렬) -->
+      <div class="toolbar__actions">
+        <!-- 다크모드 토글 (12단계) — 라벨/title 은 theme.js 가 현재 상태에 맞춰 갱신 -->
+        <button type="button" class="btn" id="btn-theme" title="다크모드로 전환">다크모드</button>
+        <!-- 엑셀 내보내기/가져오기 드롭다운 (9단계) -->
+        <div class="display-dropdown" id="excel-dropdown">
+          <button type="button" class="btn" id="btn-excel" aria-haspopup="true" aria-expanded="false">내보내기 ▾</button>
+          <div class="display-menu" id="excel-menu" hidden>
+            <button type="button" class="menu-btn" id="btn-excel-export">엑셀 내보내기</button>
+            <button type="button" class="menu-btn" id="btn-excel-import">엑셀 가져오기</button>
+            <button type="button" class="menu-btn" id="btn-png">PNG 저장</button>
+            <button type="button" class="menu-btn" id="btn-pptx">PPTX 저장</button>
+          </div>
+        </div>
+        <!-- 가져오기용 숨김 파일 선택 (.xlsx) -->
+        <input type="file" id="excel-file-input" accept=".xlsx" hidden>
+        <!-- 요소별 표시 토글 드롭다운 -->
+        <div class="display-dropdown" id="display-dropdown">
+          <button type="button" class="btn" id="btn-display" aria-haspopup="true" aria-expanded="false">표시 ▾</button>
+          <div class="display-menu" id="display-menu" hidden>
+            <label class="display-menu__item"><input type="checkbox" data-display="progress"> 진행률</label>
+            <label class="display-menu__item"><input type="checkbox" data-display="priority"> 우선순위</label>
+            <label class="display-menu__item"><input type="checkbox" data-display="delay"> 지연 경고</label>
+            <label class="display-menu__item"><input type="checkbox" data-display="deps"> 의존선</label>
+            <label class="display-menu__item"><input type="checkbox" data-display="legend"> 범례</label>
+          </div>
+        </div>
+        <button type="button" class="btn btn--primary" id="btn-add-project">+ 프로젝트</button>
+        <!-- 프로젝트가 0개면 비활성 (JS 렌더 시 disabled 토글) -->
+        <button type="button" class="btn" id="btn-add-task">+ 태스크</button>
+      </div>
+    </header>
+
+    <!-- 상태 범례 (5색, 영문+한국어 병기) — 표시 토글로 숨김 가능 -->
+    <div class="legend-bar" id="legend-bar">
+      <span class="legend-bar__title">상태</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#9ca3af"></span>Plan (계획)</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#8b5cf6"></span>Set up (준비)</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#3b82f6"></span>Ongoing (진행)</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#22c55e"></span>Complete (완료)</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#ef4444"></span>Delayed (지연)</span>
+      <span class="legend-sep">·</span>
+      <span class="legend-item"><span class="legend-warn">⚠</span>종료일 경과</span>
+    </div>
+
+    <!-- 간트 영역: 좌측 태스크 목록 패널 + 우측 타임라인 -->
+    <div class="gantt" id="gantt">
+      <!-- 좌측 태스크 목록 패널 (고정 폭) -->
+      <div class="gantt__left" id="gantt-left">
+        <!-- 좌측 헤더 (타임라인 축 헤더와 높이 일치) -->
+        <div class="gantt__left-head" id="gantt-left-head">태스크</div>
+        <!-- 좌측 본문: 프로젝트 그룹 + 태스크 행 -->
+        <div class="gantt__left-body" id="gantt-left-body"></div>
+      </div>
+
+      <!-- 우측 타임라인 (가로 스크롤 가능) -->
+      <div class="gantt__right" id="gantt-right">
+        <!-- 타임라인 축 헤더 (2줄) -->
+        <div class="timeline__head" id="timeline-head"></div>
+        <!-- 타임라인 본문: 격자 + 태스크 바 -->
+        <div class="timeline__body" id="timeline-body"></div>
+      </div>
+    </div>
+
+    <!-- 빈 상태 안내 (데이터 없을 때만 표시) -->
+    <div class="empty-state" id="empty-state" hidden>
+      <p class="empty-state__title">아직 프로젝트가 없습니다</p>
+      <p class="empty-state__desc">프로젝트와 태스크를 추가하면 여기에 간트 차트가 표시됩니다.</p>
+    </div>
+  </div>
+
+  <!-- ── 우측 슬라이드 패널 (프로젝트/태스크 폼) ── -->
+  <!-- 패널 뒤 반투명 배경: 클릭 시 패널 닫힘 -->
+  <div class="panel-backdrop" id="panel-backdrop" hidden></div>
+  <aside class="side-panel" id="side-panel" hidden aria-hidden="true" aria-labelledby="panel-title">
+    <div class="side-panel__head">
+      <h2 class="side-panel__title" id="panel-title">폼</h2>
+      <button type="button" class="side-panel__close" id="panel-close" aria-label="닫기">×</button>
+    </div>
+    <!-- 폼 본문은 JS 에서 프로젝트/태스크 폼을 주입 -->
+    <div class="side-panel__body" id="panel-body"></div>
+  </aside>
+
+  <!-- ── 삭제 확인 모달 (confirm 대체) ── -->
+  <div class="modal-backdrop" id="modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h3 class="modal__title" id="modal-title">삭제 확인</h3>
+      <p class="modal__msg" id="modal-msg"></p>
+      <div class="modal__actions">
+        <button type="button" class="btn" id="modal-cancel">취소</button>
+        <button type="button" class="btn btn--danger" id="modal-confirm">삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 엑셀 가져오기 미리보기 모달 (9단계) ── -->
+  <div class="modal-backdrop" id="import-backdrop" hidden>
+    <div class="modal modal--import" role="dialog" aria-modal="true" aria-labelledby="import-title">
+      <h3 class="modal__title" id="import-title">엑셀 가져오기 미리보기</h3>
+      <!-- 요약: 추가될 프로젝트/태스크 수 + 오류 건수 -->
+      <div class="import-summary" id="import-summary"></div>
+      <!-- 행별 오류 목록 (없으면 숨김) -->
+      <div class="import-errors" id="import-errors" hidden></div>
+      <!-- 행 단위 미리보기 테이블 (처음 20행 + "…외 N행") -->
+      <div class="import-table-wrap">
+        <table class="import-table" id="import-table"></table>
+      </div>
+      <!-- 오류가 있을 때만 노출: 오류 행 제외하고 반영 -->
+      <label class="import-exclude" id="import-exclude-wrap" hidden>
+        <input type="checkbox" id="import-exclude"> 오류 행을 제외하고 반영
+      </label>
+      <div class="modal__actions">
+        <button type="button" class="btn" id="import-cancel">취소</button>
+        <button type="button" class="btn btn--primary" id="import-apply">반영</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 내보내기 범위 선택 모달 (엑셀/PNG 공용) ── -->
+  <div class="modal-backdrop" id="scope-backdrop" hidden>
+    <div class="modal modal--scope" role="dialog" aria-modal="true" aria-labelledby="scope-title">
+      <h3 class="modal__title" id="scope-title">내보내기 범위</h3>
+      <!-- 본문(선택 섹션들): 모달이 화면보다 길어지면 이 안에서만 세로 스크롤 -->
+      <div class="scope-body">
+      <!-- 전체(기본) / 선택한 프로젝트 + 프로젝트 셀렉트 -->
+      <div class="scope-options">
+        <label class="scope-option">
+          <input type="radio" name="scope-mode" id="scope-mode-all" value="all" checked> 전체 프로젝트
+        </label>
+        <label class="scope-option">
+          <input type="radio" name="scope-mode" id="scope-mode-project" value="project"> 선택한 프로젝트
+        </label>
+        <!-- "선택한 프로젝트" 라디오를 골라야 활성화 (항목: [업무]/[개인] 프로젝트명) -->
+        <select class="scope-select" id="scope-project" disabled aria-label="프로젝트 선택"></select>
+      </div>
+      <!-- 차트 표현 방식 선택 (PPTX 전용, 13단계) — 엑셀/PNG 에서는 hidden 유지 -->
+      <div class="scope-layout" id="scope-mode-chart" hidden>
+        <div class="scope-layout__title">차트 표현</div>
+        <label class="scope-option">
+          <input type="radio" name="scope-chart-mode" id="scope-chart-image" value="image" checked>
+          <span class="scope-layout__text">이미지 (웹 화면 그대로)
+            <small class="scope-layout__desc">웹 화면을 캡처해 그림으로 넣습니다. 화면과 모양이 완전히 같지만 파워포인트에서 편집할 수 없습니다.</small>
+          </span>
+        </label>
+        <label class="scope-option">
+          <input type="radio" name="scope-chart-mode" id="scope-chart-shapes" value="shapes">
+          <span class="scope-layout__text">도형 (파워포인트에서 편집 가능)
+            <small class="scope-layout__desc">간트 차트를 파워포인트 기본 도형으로 다시 그립니다. 확대해도 선명하고 도형·글자를 직접 고칠 수 있습니다. 행이 많으면 자동으로 여러 슬라이드로 나뉩니다.</small>
+          </span>
+        </label>
+      </div>
+      <!-- 레이아웃 선택 (PPTX 전용) — 엑셀/PNG 에서는 hidden 유지 -->
+      <div class="scope-layout" id="scope-layout" hidden>
+        <div class="scope-layout__title">슬라이드 레이아웃</div>
+        <label class="scope-option">
+          <input type="radio" name="scope-layout" id="scope-layout-fit" value="fit" checked>
+          <span class="scope-layout__text">프로젝트당 1슬라이드 (전체 축소)
+            <small class="scope-layout__desc">각 프로젝트 차트를 슬라이드 1장에 비율 유지로 축소해 담습니다.</small>
+          </span>
+        </label>
+        <label class="scope-option">
+          <input type="radio" name="scope-layout" id="scope-layout-split" value="split">
+          <span class="scope-layout__text">긴 프로젝트는 기간 분할 (여러 슬라이드)
+            <small class="scope-layout__desc">한 슬라이드에 담기 어려운 넓은 차트는 타임라인을 여러 슬라이드로 나눕니다.</small>
+          </span>
+        </label>
+      </div>
+      <!-- 태스크 목록 표 포함 (PPTX 전용, 13단계) — 기본 꺼짐 -->
+      <div class="scope-layout" id="scope-table" hidden>
+        <div class="scope-layout__title">추가 슬라이드</div>
+        <label class="scope-option">
+          <input type="checkbox" id="scope-include-table">
+          <span class="scope-layout__text">태스크 목록 표 포함
+            <small class="scope-layout__desc">차트 슬라이드 뒤에 태스크명·담당자·시작/종료일·진행률·상태·우선순위 표 슬라이드를 추가합니다. 행이 많으면 여러 슬라이드로 나눠 담습니다.</small>
+          </span>
+        </label>
+      </div>
+      </div><!-- /.scope-body -->
+      <div class="modal__actions">
+        <button type="button" class="btn" id="scope-cancel">취소</button>
+        <button type="button" class="btn btn--primary" id="scope-confirm">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 엑셀 라이브러리(xlsx-js-style 로컬 번들) -> 데이터/CRUD -> 드래그 -> 렌더링 -> 엑셀 UI 순서 -->
+  <!-- drag.js 는 gantt.js 보다 먼저 로드해 window.GanttDrag 를 미리 정의한다 -->
+  <!-- html2canvas 는 PNG 출력용 로컬 번들(CDN 의존 없음) — png.js 보다 먼저 로드 -->
+  <script src="/vendor/html2canvas.min.js"></script>
+  <!-- PptxGenJS 로컬 번들 (CDN 의존 없음) — PPTX 출력용, pptx.js 보다 먼저 로드 -->
+  <script src="/vendor/pptxgen.bundle.js"></script>
+  <script src="/vendor/xlsx.full.min.js"></script>
+  <!-- 다크모드 토글 로직 (12단계) — 버튼 하나만 다루므로 로드 순서 제약이 없다 -->
+  <script src="/js/theme.js"></script>
+  <!-- 모달/패널 공용 Tab 트랩 유틸 (12단계) — crud.js/export.js/scope.js 가 사용하므로 먼저 로드 -->
+  <script src="/js/focus-trap.js"></script>
+  <script src="/js/crud.js"></script>
+  <script src="/js/drag.js"></script>
+  <!-- scope.js 는 범위 모달(window.ExportScope)과 공유 순수 함수(computeRangeForTasks 등)를
+       제공하므로 gantt.js/export.js/png.js 보다 먼저 로드한다 -->
+  <script src="/js/scope.js"></script>
+  <script src="/js/gantt.js"></script>
+  <script src="/js/export.js"></script>
+  <!-- 내보내기 캡처 공용 유틸(html2canvas 옵션·onclone) — png.js/pptx.js 보다 먼저 로드 -->
+  <script src="/js/export-capture.js"></script>
+  <script src="/js/png.js"></script>
+  <!-- PPTX 네이티브 도형 렌더링 (13단계) — pptx.js 가 window.PptxShapes 를 쓰므로 먼저 로드 -->
+  <script src="/js/pptx-shapes.js"></script>
+  <!-- PPTX 출력 (11단계) — scope.js(ExportScope)·gantt.js(buildChartDom) 뒤에서 로드 -->
+  <script src="/js/pptx.js"></script>
+</body>
+</html>
