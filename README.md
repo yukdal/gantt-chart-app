@@ -169,7 +169,10 @@ pm2 startOrRestart ecosystem.config.js --env production
 서버는 `127.0.0.1` 에만 바인딩되므로 외부 노출 없이 SSH 터널로만 접근하는 구성을 권장합니다.
 (방화벽에서 앱 포트를 열지 마세요.)
 
-## 포함된 오픈소스
+## 라이선스
+
+[MIT License](LICENSE) — 자유롭게 사용·수정·재배포할 수 있습니다.
+저작권 표시와 라이선스 전문만 함께 포함해 주세요. 사용에 따른 책임은 지지 않습니다.
 
 `public/vendor/` 의 라이브러리는 각자의 라이선스를 따릅니다.
 xlsx-js-style(Apache-2.0) · html2canvas(MIT) · PptxGenJS(MIT)
