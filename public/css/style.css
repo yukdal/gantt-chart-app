@@ -995,8 +995,9 @@ body {
   color: var(--text-muted);
 }
 
-/* 업무 카테고리 안내 박스 (노란 배경) */
-.notice--work {
+/* 업무 카테고리 안내 박스 / 프로젝트 이동 안내 박스 (노란 배경, 경고 톤) */
+.notice--work,
+.notice--move {
   background: var(--warn-bg);
   border: 1px solid var(--warn-border);
   border-radius: 6px;
@@ -1006,7 +1007,8 @@ body {
   color: var(--warn-text);
 }
 
-.notice--work[hidden] {
+.notice--work[hidden],
+.notice--move[hidden] {
   display: none;
 }
 

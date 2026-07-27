@@ -54,31 +54,66 @@ function nowIso() {
 }
 
 /**
+ * 특정 태스크와 그 모든 자손(재귀) id 집합을 구한다.
+ * 삭제(하위 동반 삭제)와 프로젝트 이동(하위 동반 이동)에서 공용으로 쓴다.
+ * @param {object[]} tasks 전체 태스크 목록
+ * @param {string} rootId 기준 태스크 id
+ * @returns {Set<string>} 자기 자신 + 모든 자손 id
+ */
+function collectSubtreeIds(tasks, rootId) {
+  const ids = new Set();
+  (function collect(id) {
+    ids.add(id);
+    for (const t of tasks) {
+      if ((t.parentId || null) === id) collect(t.id);
+    }
+  })(rootId);
+  return ids;
+}
+
+/**
+ * 태스크의 "판정 기준" projectId 를 돌려주는 함수를 만든다.
+ * 프로젝트 이동 중에는 이동 집합에 속한 태스크를 이미 새 프로젝트 소속인 것처럼
+ * 취급해야 부모/의존 검증이 올바르게 동작한다. (이동은 아직 적용 전이므로)
+ * @param {Set<string>|null} moveSet 이동 대상 id 집합 (이동이 아니면 null)
+ * @param {string|null} newProjectId 새 projectId
+ * @returns {(t: object) => string} 판정용 projectId 반환 함수
+ */
+function makeProjectOf(moveSet, newProjectId) {
+  if (!moveSet) return (t) => t.projectId;
+  return (t) => (moveSet.has(t.id) ? newProjectId : t.projectId);
+}
+
+/**
  * parentId 값의 유효성을 검사한다. (null 은 허용 = 최상위)
+ * @param {function} [projectOf] 태스크의 판정용 projectId 를 돌려주는 함수(이동 시 사용)
  * @returns {string|null} 문제가 있으면 오류 메시지, 없으면 null
  */
-function parentIdError(data, projectId, parentId, selfId) {
+function parentIdError(data, projectId, parentId, selfId, projectOf) {
+  const pOf = projectOf || ((t) => t.projectId);            // 기본은 실제 projectId
   if (parentId === null) return null;                       // 최상위 허용
   if (typeof parentId !== 'string') return 'parentId 는 문자열 또는 null 이어야 합니다.';
   if (selfId !== null && parentId === selfId) return '태스크는 자기 자신을 부모로 지정할 수 없습니다.';
   const parent = data.tasks.find((t) => t.id === parentId); // 부모 태스크 조회
   if (!parent) return '존재하지 않는 부모 태스크입니다.';
-  if (parent.projectId !== projectId) return '부모 태스크는 같은 프로젝트에 속해야 합니다.';
+  if (pOf(parent) !== projectId) return '부모 태스크는 같은 프로젝트에 속해야 합니다.';
   return null;
 }
 
 /**
  * dependencies 배열의 유효성을 검사한다.
+ * @param {function} [projectOf] 태스크의 판정용 projectId 를 돌려주는 함수(이동 시 사용)
  * @returns {string|null} 문제가 있으면 오류 메시지, 없으면 null
  */
-function dependenciesError(data, projectId, deps, selfId) {
+function dependenciesError(data, projectId, deps, selfId, projectOf) {
+  const pOf = projectOf || ((t) => t.projectId);            // 기본은 실제 projectId
   if (!Array.isArray(deps)) return 'dependencies 는 배열이어야 합니다.';
   for (const depId of deps) {
     if (typeof depId !== 'string') return 'dependencies 항목은 문자열 id 여야 합니다.';
     if (selfId !== null && depId === selfId) return '태스크는 자기 자신에 의존할 수 없습니다.';
     const dep = data.tasks.find((t) => t.id === depId);     // 선행 태스크 조회
     if (!dep) return `존재하지 않는 의존 태스크입니다: ${depId}`;
-    if (dep.projectId !== projectId) return '의존 태스크는 같은 프로젝트에 속해야 합니다.';
+    if (pOf(dep) !== projectId) return '의존 태스크는 같은 프로젝트에 속해야 합니다.';
   }
   return null;
 }
@@ -298,18 +333,31 @@ app.post('/api/tasks', (req, res) => {
   res.status(201).json(task);
 });
 
-// 태스크 수정 (부분 수정 허용, projectId 변경 금지)
+// 태스크 수정 (부분 수정 허용)
+// - projectId 를 다른 값으로 보내면 "프로젝트 이동"으로 처리한다.
+//   이동 시에는 하위 태스크(자손)가 통째로 따라가고, 프로젝트를 가로지르게 되는
+//   부모/의존 관계는 자동으로 정리된다. 모든 변경은 단 한 번의 writeData 로 원자적 반영.
 app.put('/api/tasks/:id', (req, res) => {
   const data = store.readData();
   const task = data.tasks.find((t) => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: '해당 태스크를 찾을 수 없습니다.' });
 
   const b = req.body || {};
-  // projectId 변경 금지
-  if (b.projectId !== undefined && b.projectId !== task.projectId) {
-    return res.status(400).json({ error: '태스크의 projectId 는 변경할 수 없습니다.' });
+
+  // ── 프로젝트 이동 여부 판정 ──
+  const isMove = b.projectId !== undefined && b.projectId !== task.projectId;
+  let moveSet = null;   // 이동 대상 id 집합 (자기 자신 + 모든 자손)
+  if (isMove) {
+    // 새 프로젝트가 실제로 존재해야 한다
+    if (!V.isNonEmptyString(b.projectId) || !data.projects.some((p) => p.id === b.projectId)) {
+      return res.status(400).json({ error: '존재하지 않는 프로젝트입니다.' });
+    }
+    moveSet = collectSubtreeIds(data.tasks, task.id);
   }
-  const projectId = task.projectId;
+  // 이후 검증에 쓸 기준 projectId (이동이면 새 값)
+  const projectId = isMove ? b.projectId : task.projectId;
+  // 이동 중에는 이동 집합을 "이미 새 프로젝트 소속"으로 간주해 관계 검증
+  const projectOf = makeProjectOf(moveSet, projectId);
   const updates = {};
 
   // name
@@ -381,17 +429,20 @@ app.put('/api/tasks/:id', (req, res) => {
     updates.memo = b.memo;
   }
   // parentId — 같은 프로젝트 소속 + 부모 체인 순환 거부
-  if (b.parentId !== undefined) {
-    const pErr = parentIdError(data, projectId, b.parentId, task.id);
+  // 이동 시에는 요청에 parentId 가 없거나 null 이면 반드시 최상위(null)로 끊는다.
+  // (옛 프로젝트의 부모를 그대로 두면 다른 프로젝트를 가리키는 잘못된 상태가 되므로)
+  if (isMove || b.parentId !== undefined) {
+    const nextParentId = b.parentId === undefined ? null : b.parentId;
+    const pErr = parentIdError(data, projectId, nextParentId, task.id, projectOf);
     if (pErr) return res.status(400).json({ error: pErr });
-    if (V.createsParentCycle(data.tasks, task.id, b.parentId)) {
+    if (V.createsParentCycle(data.tasks, task.id, nextParentId)) {
       return res.status(400).json({ error: '부모 태스크 설정이 순환을 만듭니다.' });
     }
-    updates.parentId = b.parentId;
+    updates.parentId = nextParentId;
   }
   // dependencies — 같은 프로젝트 소속 + 순환 의존 거부(기존 그래프와 합쳐 검사)
   if (b.dependencies !== undefined) {
-    const dErr = dependenciesError(data, projectId, b.dependencies, task.id);
+    const dErr = dependenciesError(data, projectId, b.dependencies, task.id, projectOf);
     if (dErr) return res.status(400).json({ error: dErr });
     if (V.createsDependencyCycle(data.tasks, task.id, b.dependencies)) {
       return res.status(400).json({ error: '의존 관계가 순환을 만듭니다.' });
@@ -406,9 +457,55 @@ app.put('/api/tasks/:id', (req, res) => {
     updates.order = b.order;
   }
 
-  Object.assign(task, updates, { updatedAt: nowIso() });
+  // ── 이동 시 order 재부여: 새 프로젝트의 새 형제 그룹(같은 parentId) 맨 뒤 ──
+  // 이동 집합은 아직 옛 projectId 를 갖고 있으므로 형제 수 계산에서 자연히 빠진다.
+  if (isMove) {
+    const newParentId = updates.parentId !== undefined ? updates.parentId : null;
+    updates.order = data.tasks.filter(
+      (t) => t.projectId === projectId && (t.parentId || null) === newParentId
+    ).length;
+  }
+
+  const now = nowIso();
+  Object.assign(task, updates, { updatedAt: now });
+
+  let movedTaskIds = [];        // 함께 이동한 태스크 id 목록 (안내용)
+  let clearedDependencies = 0;  // 자동 해제된 의존 개수 (안내용)
+  if (isMove) {
+    // 1) 이동 집합 전체의 projectId 갱신
+    //    (자손들 사이의 parentId 관계는 손대지 않으므로 계층 구조가 그대로 따라간다)
+    for (const t of data.tasks) {
+      if (!moveSet.has(t.id)) continue;
+      t.projectId = projectId;
+      t.updatedAt = now;
+    }
+    movedTaskIds = [...moveSet];
+
+    // 2) 프로젝트를 가로지르게 된 의존 제거
+    //    - 이동 집합 → 옛 프로젝트 잔류 태스크
+    //    - 옛 프로젝트 잔류 태스크 → 이동 집합
+    //    이동 집합 내부끼리의 의존은 함께 움직이므로 같은 프로젝트를 유지 → 그대로 둔다.
+    const byId = {};
+    for (const t of data.tasks) byId[t.id] = t;
+    for (const t of data.tasks) {
+      if (!Array.isArray(t.dependencies) || t.dependencies.length === 0) continue;
+      // 이동과 무관한 태스크는 건드리지 않는다
+      if (!moveSet.has(t.id) && !t.dependencies.some((d) => moveSet.has(d))) continue;
+      const kept = t.dependencies.filter((d) => {
+        const dep = byId[d];
+        return dep && dep.projectId === t.projectId;   // 같은 프로젝트인 것만 유지
+      });
+      if (kept.length !== t.dependencies.length) {
+        clearedDependencies += t.dependencies.length - kept.length;
+        t.dependencies = kept;
+        t.updatedAt = now;
+      }
+    }
+  }
+
   store.writeData(data);
-  res.json(task);
+  // 이동한 경우에만 부가 정보를 덧붙인다 (기존 응답 형태는 그대로 유지)
+  res.json(isMove ? Object.assign({}, task, { movedTaskIds, clearedDependencies }) : task);
 });
 
 // 태스크 삭제 (하위 태스크 재귀 삭제 + 다른 태스크의 dependencies 에서 제거)
@@ -418,13 +515,7 @@ app.delete('/api/tasks/:id', (req, res) => {
   if (!target) return res.status(404).json({ error: '해당 태스크를 찾을 수 없습니다.' });
 
   // 삭제 대상 집합: 자신 + 모든 하위(재귀)
-  const toDelete = new Set();
-  (function collect(id) {
-    toDelete.add(id);
-    for (const t of data.tasks) {
-      if ((t.parentId || null) === id) collect(t.id);
-    }
-  })(target.id);
+  const toDelete = collectSubtreeIds(data.tasks, target.id);
 
   // 대상 제거
   data.tasks = data.tasks.filter((t) => !toDelete.has(t.id));

@@ -114,13 +114,15 @@ function buildProjectPayload(form) {
 
 /**
  * 태스크 생성/수정용 페이로드를 만든다.
- * - 생성 시에는 projectId 포함(생성 후 변경 불가), 수정 시에는 제외한다.
+ * - projectId 는 생성·수정 모두 포함한다. 수정 시 값이 달라지면 서버가
+ *   "프로젝트 이동"으로 처리한다(하위 태스크 동반 이동 + 교차 프로젝트 의존 정리).
  * @param {object} form 태스크 폼 값
- * @param {boolean} isEdit 수정 여부
+ * @param {boolean} isEdit 수정 여부 (현재는 페이로드 형태에 영향 없음, 호환 위해 유지)
  * @returns {object} 서버로 보낼 페이로드
  */
 function buildTaskPayload(form, isEdit) {
-  var payload = {
+  return {
+    projectId: form.projectId,
     name: (form.name || '').trim(),
     parentId: form.parentId ? form.parentId : null,
     assignee: form.assignee || '',
@@ -133,8 +135,50 @@ function buildTaskPayload(form, isEdit) {
     dependencies: Array.isArray(form.dependencies) ? form.dependencies : [],
     memo: form.memo || '',
   };
-  if (!isEdit) payload.projectId = form.projectId; // 생성 시에만
-  return payload;
+}
+
+/**
+ * 태스크를 다른 프로젝트로 옮길 때 함께 일어나는 변화를 미리 계산한다.
+ * (수정 패널의 이동 안내 문구용 — 실제 처리는 서버가 한다)
+ * @param {object[]} tasks 전체 태스크
+ * @param {string} taskId 이동할 태스크 id
+ * @param {string} newProjectId 새 프로젝트 id
+ * @returns {{moving:number, descendants:number, brokenDeps:number, isMove:boolean}}
+ *   moving=함께 이동할 총 개수(자신 포함), descendants=하위 개수,
+ *   brokenDeps=해제될 선행 관계 건수
+ */
+function computeMoveImpact(tasks, taskId, newProjectId) {
+  var task = tasks.filter(function (t) { return t.id === taskId; })[0];
+  if (!task || !newProjectId || task.projectId === newProjectId) {
+    return { moving: 0, descendants: 0, brokenDeps: 0, isMove: false };
+  }
+  // 이동 집합 = 자신 + 모든 자손
+  var inMove = {};
+  inMove[taskId] = true;
+  getDescendantIds(tasks, taskId).forEach(function (id) { inMove[id] = true; });
+  var descendants = Object.keys(inMove).length - 1;
+
+  // 해제될 선행 관계: 이동 집합과 옛 프로젝트 잔류분을 잇는 의존(양방향)
+  var broken = 0;
+  tasks.forEach(function (t) {
+    if (!Array.isArray(t.dependencies)) return;
+    var fromMove = !!inMove[t.id];
+    t.dependencies.forEach(function (depId) {
+      var toMove = !!inMove[depId];
+      if (fromMove === toMove) return;                 // 둘 다 이동 / 둘 다 잔류 → 유지
+      // 한쪽만 이동 집합이면 프로젝트를 가로지르게 되므로 해제된다
+      var other = fromMove ? depId : t.id;
+      var otherTask = tasks.filter(function (x) { return x.id === other; })[0];
+      if (otherTask && otherTask.projectId === task.projectId) broken += 1;
+    });
+  });
+
+  return {
+    moving: descendants + 1,
+    descendants: descendants,
+    brokenDeps: broken,
+    isMove: true,
+  };
 }
 
 // Node(테스트) 환경에서 순수 함수 검증할 수 있도록 내보내기
@@ -146,6 +190,7 @@ if (typeof module !== 'undefined' && module.exports) {
     validateTaskForm: validateTaskForm,
     buildProjectPayload: buildProjectPayload,
     buildTaskPayload: buildTaskPayload,
+    computeMoveImpact: computeMoveImpact,
   };
 }
 
@@ -357,8 +402,10 @@ if (typeof document !== 'undefined') {
         '<div class="form__error" id="form-error" hidden></div>',
         '<label class="field">',
         '<span class="field__label">프로젝트 <em>*</em></span>',
-        '<select id="f-project" class="field__select"' + (task ? ' disabled' : '') + '>' + projectOptions(projects, projectId) + '</select>',
+        '<select id="f-project" class="field__select">' + projectOptions(projects, projectId) + '</select>',
         '</label>',
+        // 프로젝트를 바꿨을 때만 보이는 이동 안내 (하위 동반 이동 · 선행 관계 해제)
+        '<div class="notice notice--move" id="move-notice" hidden></div>',
         '<label class="field">',
         '<span class="field__label">태스크명 <em>*</em></span>',
         '<input type="text" id="f-name" class="field__input" maxlength="200" value="' + esc(t.name || '') + '">',
@@ -439,6 +486,28 @@ if (typeof document !== 'undefined') {
       depsSel.innerHTML = depsHtml || '<option value="" disabled>선택 가능한 태스크가 없습니다</option>';
     }
 
+    // 수정 모드에서 프로젝트를 바꿨을 때 폼 안에 이동 안내를 표시한다.
+    // (하위 동반 이동 개수 · 해제될 선행 관계 건수 — 해당 사항이 없으면 문구 생략)
+    function updateMoveNotice(task, selectedProjectId) {
+      var box = $('move-notice');
+      if (!box) return;
+      if (!task) { box.hidden = true; box.textContent = ''; return; }
+
+      var impact = computeMoveImpact(state().tasks, task.id, selectedProjectId);
+      if (!impact.isMove) { box.hidden = true; box.textContent = ''; return; }
+
+      var parts = [];
+      if (impact.descendants > 0) {
+        parts.push('하위 태스크 ' + impact.descendants + '개도 함께 이동합니다.');
+      }
+      if (impact.brokenDeps > 0) {
+        parts.push('다른 프로젝트의 선행 관계 ' + impact.brokenDeps + '건은 해제됩니다.');
+      }
+      if (parts.length === 0) parts.push('이 태스크를 선택한 프로젝트로 옮깁니다.');
+      box.textContent = parts.join(' ');
+      box.hidden = false;
+    }
+
     function openTaskForm(task, defaultProjectId) {
       var isEdit = !!task;
       var s = state();
@@ -449,12 +518,14 @@ if (typeof document !== 'undefined') {
       refreshRelations(projectId, task || null);
 
       var form = $('entity-form');
-      // 생성 모드에서 프로젝트를 바꾸면 상위/선행 후보를 다시 로드
-      if (!isEdit) {
-        $('f-project').addEventListener('change', function () {
-          refreshRelations($('f-project').value, null);
-        });
-      }
+      // 프로젝트를 바꾸면 상위/선행 후보를 새 프로젝트 기준으로 다시 로드한다.
+      // 수정 모드에서도 동작한다(= 다른 프로젝트로 이동 + 새 상위 즉시 선택).
+      // 기존에 고르던 상위/선행 id 는 새 프로젝트에 없으므로 자동으로 초기화된다
+      // (상위='없음', 선행=선택 없음).
+      $('f-project').addEventListener('change', function () {
+        refreshRelations($('f-project').value, task || null);
+        updateMoveNotice(task || null, $('f-project').value);
+      });
       $('f-cancel').addEventListener('click', closePanel);
 
       form.addEventListener('submit', async function (e) {
@@ -465,7 +536,8 @@ if (typeof document !== 'undefined') {
           .filter(function (v) { return v; });
 
         var formVals = {
-          projectId: isEdit ? task.projectId : $('f-project').value,
+          // 수정 시에도 현재 select 값을 그대로 보낸다 (다르면 서버가 이동 처리)
+          projectId: $('f-project').value,
           name: $('f-name').value,
           parentId: $('f-parent').value || null,
           assignee: $('f-assignee').value,
